@@ -10,7 +10,11 @@ LOG="dist/auto-release.log"
 mkdir -p dist
 : > "$LOG"
 notes=()
-say() { local IFS=' · '; printf '{"systemMessage": "Auto-release: %s"}\n' "${notes[*]}"; }
+say() {
+  local out="${notes[0]}" n
+  for n in "${notes[@]:1}"; do out="$out, $n"; done
+  printf '{"systemMessage": "Auto-release: %s"}\n' "$out"
+}
 
 # 1) Commit anything uncommitted (Claude normally commits with a proper message first).
 if [ -n "$(git status --porcelain)" ]; then
