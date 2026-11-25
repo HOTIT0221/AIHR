@@ -37,14 +37,19 @@ if [ "$built" != "$head" ]; then
     need_build=0
   fi
   if [ "$need_build" = 1 ]; then
-    if npm run dist >>"$LOG" 2>&1; then
+    # A running copy of the app locks the exe and electron-builder would wait forever, so skip instead.
+    if tasklist //NH 2>/dev/null | grep -qi "AITrain"; then
+      notes+=("exe NOT rebuilt: the app is open, close it and it rebuilds next time")
+    elif timeout 900 npm run dist >>"$LOG" 2>&1; then
       notes+=("exe rebuilt")
+      echo "$head" > dist/.built-commit
     else
-      notes+=("exe build FAILED (is the app open? close it and retry), see $LOG")
-      say; exit 0   # don't record a build that didn't happen, but still fall through next time
+      notes+=("exe build FAILED, see $LOG")
     fi
+    # Not recording .built-commit on skip/failure means the next run tries again.
+  else
+    echo "$head" > dist/.built-commit
   fi
-  echo "$head" > dist/.built-commit
 fi
 
 # 3) Push if GitHub is behind. Never prompt: a hook can't answer a sign-in dialog.
