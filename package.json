@@ -13,7 +13,7 @@
     "appId": "com.aitrain.hrmanager",
     "productName": "AITrain HR Manager",
     "directories": { "output": "dist", "buildResources": "build" },
-    "files": ["main.js", "preload.js", "renderer/**/*", "package.json"],
+    "files": ["main.js", "preload.js", "db.js", "renderer/**/*", "package.json"],
     "win": { "icon": "build/icon.png", "target": "portable" },
     "portable": { "artifactName": "AITrain-HR-Manager-${version}.exe" }
   },

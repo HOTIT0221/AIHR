@@ -26,12 +26,22 @@ This creates a portable single-file app at `dist\AITrain-HR-Manager-1.0.0.exe` (
 - Change a state from the table by clicking its pill
 - One-click copy for contact, AnyDesk ID and password; passwords are masked until you reveal them
 - Date pickers with **Today** and **Clear** shortcuts. Future dates show as *scheduled*, past ones as "x days ago"
-- Undo after deleting, dark and light themes, CSV export, JSON backup and restore
+- Undo after deleting, dark and light themes, CSV export, backup and restore (`.db` or `.json`)
 - Shortcuts: `Ctrl+N` new, `Ctrl+F` search, `Ctrl+S` save in the form, `Esc` close, double-click a row to edit
 
 ## Data
 
-Data is saved automatically to `%APPDATA%\AITrain HR Manager\collaborators.json`.
-AnyDesk passwords are stored there as plain text, so keep the file private and use **Backup** regularly.
+Data is stored in a SQLite database at `%APPDATA%\AITrain HR Manager\hrmanager.db`. It uses the SQLite engine
+built into Electron (`node:sqlite`), so there are no native modules to compile. Every change is written immediately.
 
-To change the list of states, edit the `STATES` array at the top of `renderer/app.js`.
+Table `collaborators`: `id`, `name`, `linkedin`, `contact`, `da_date`, `hs_date` (`YYYY-MM-DD` or NULL),
+`anydesk_id`, `anydesk_password`, `state`, `notes`, `created_at`, `updated_at` (ms timestamps).
+The schema version is kept in `PRAGMA user_version`. Add future migrations in `db.js`.
+
+- **Backup** saves a consistent snapshot of the database as `.db`, or as `.json` if you pick that type.
+- **Restore** merges a `.db` or `.json` backup into the current data, matching people by id.
+- Older versions stored data in `collaborators.json`. It is imported automatically on first launch and renamed to `collaborators.json.migrated`.
+
+AnyDesk passwords are stored as plain text in the database, so keep the file and your backups private.
+
+To change the list of states, edit the `STATES` array at the top of `renderer/app.js` and `STATE_KEYS` in `db.js`.

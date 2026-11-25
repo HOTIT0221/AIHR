@@ -116,9 +116,31 @@ const ui = {
   firstRender: true,
 };
 
-async function persist() {
-  const res = await window.api.save(data);
-  if (!res || !res.ok) toast(`Could not save: ${res?.error || 'unknown error'}`, { type: 'error' });
+/* Every change is written to SQLite immediately, one row at a time.
+   The UI updates first; if the database rejects a change we reload from it so the screen never lies. */
+async function reloadFromDb() {
+  const res = await window.api.list();
+  if (res?.ok) data.collaborators = res.collaborators;
+  render();
+}
+async function saveOne(c) {
+  const res = await window.api.upsert(c);
+  if (!res?.ok) {
+    toast(`Could not save: ${res?.error || 'unknown error'}`, { type: 'error' });
+    await reloadFromDb();
+    return false;
+  }
+  Object.assign(c, res.collaborator);
+  return true;
+}
+async function removeOne(id) {
+  const res = await window.api.remove(id);
+  if (!res?.ok) {
+    toast(`Could not delete: ${res?.error || 'unknown error'}`, { type: 'error' });
+    await reloadFromDb();
+    return false;
+  }
+  return true;
 }
 const findById = (id) => data.collaborators.find((c) => c.id === id);
 
@@ -359,18 +381,17 @@ async function submitForm(e) {
     notes: f.notes.value.trim(),
     updatedAt: Date.now(),
   };
-  let id = ui.editingId;
-  if (id) {
-    Object.assign(findById(id), values);
-    toast(`Saved ${name}`);
+  const isEdit = !!ui.editingId;
+  let record = isEdit && findById(ui.editingId);
+  if (record) {
+    Object.assign(record, values);
   } else {
-    id = crypto.randomUUID();
-    data.collaborators.push({ id, createdAt: Date.now(), ...values });
-    toast(`Added ${name}`);
+    record = { id: crypto.randomUUID(), createdAt: Date.now(), ...values };
+    data.collaborators.push(record);
   }
   closeDrawer();
-  renderStats(); renderFilters(); renderTable(id);
-  await persist();
+  renderStats(); renderFilters(); renderTable(record.id);
+  if (await saveOne(record)) toast(isEdit ? `Saved ${name}` : `Added ${name}`);
 }
 
 async function deleteCollaborator(id) {
@@ -380,14 +401,14 @@ async function deleteCollaborator(id) {
   ui.revealed.delete(id);
   if (drawerOpen()) closeDrawer();
   render();
-  await persist();
+  if (!(await removeOne(id))) return;
   toast(`Deleted ${removed.name}`, {
     action: {
       label: 'Undo',
       fn: async () => {
         data.collaborators.splice(Math.min(idx, data.collaborators.length), 0, removed);
         render(); renderTable(removed.id);
-        await persist();
+        await saveOne(removed);
       },
     },
   });
@@ -475,41 +496,19 @@ async function exportCsv() {
 }
 
 async function backup() {
-  const res = await window.api.saveFile({
-    defaultName: `collaborators-backup-${todayISO()}.json`,
-    content: JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), collaborators: data.collaborators }, null, 2),
-    filters: [{ name: 'JSON', extensions: ['json'] }],
-  });
-  if (res.ok) toast('Backup saved');
+  const res = await window.api.backup(todayISO());
+  if (res.canceled) return;
+  if (!res.ok) return toast(`Backup failed: ${res.error}`, { type: 'error' });
+  toast('Backup saved');
 }
 
 async function restore() {
-  const res = await window.api.openFile();
+  const res = await window.api.restore();
   if (res.canceled) return;
   if (!res.ok) return toast(`Import failed: ${res.error}`, { type: 'error' });
-  let added = 0, updated = 0;
-  for (const raw of res.collaborators) {
-    if (!raw || typeof raw !== 'object' || !String(raw.name || '').trim()) continue;
-    const item = {
-      id: typeof raw.id === 'string' && raw.id ? raw.id : crypto.randomUUID(),
-      name: String(raw.name).trim(),
-      linkedin: String(raw.linkedin || ''),
-      contact: String(raw.contact || ''),
-      daDate: /^\d{4}-\d{2}-\d{2}$/.test(raw.daDate) ? raw.daDate : '',
-      hsDate: /^\d{4}-\d{2}-\d{2}$/.test(raw.hsDate) ? raw.hsDate : '',
-      anydeskId: String(raw.anydeskId || ''),
-      anydeskPassword: String(raw.anydeskPassword || ''),
-      state: STATE_MAP[raw.state] ? raw.state : 'new',
-      notes: String(raw.notes || ''),
-      createdAt: Number(raw.createdAt) || Date.now(),
-      updatedAt: Number(raw.updatedAt) || Date.now(),
-    };
-    const existing = findById(item.id);
-    if (existing) { Object.assign(existing, item); updated++; } else { data.collaborators.push(item); added++; }
-  }
+  data.collaborators = res.collaborators;
   render();
-  await persist();
-  toast(`Imported: ${added} added, ${updated} updated`);
+  toast(`Imported: ${res.added} added, ${res.updated} updated${res.skipped ? `, ${res.skipped} skipped` : ''}`);
 }
 
 /* ───────────── Events ───────────── */
@@ -620,8 +619,7 @@ function bindEvents() {
     c.state = b.dataset.state;
     c.updatedAt = Date.now();
     renderStats(); renderFilters(); renderTable(c.id);
-    toast(`${c.name} → ${stateOf(c.state).label}`);
-    await persist();
+    if (await saveOne(c)) toast(`${c.name} → ${stateOf(c.state).label}`);
   });
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#popover') && !e.target.closest('[data-act="state"]')) closePopover();
@@ -658,9 +656,10 @@ function bindEvents() {
 (async function init() {
   hydrateIcons();
   applyTheme(localStorage.getItem('theme') || 'dark');
-  const loaded = await window.api.load();
-  data = { collaborators: Array.isArray(loaded?.collaborators) ? loaded.collaborators : [] };
+  const loaded = await window.api.list();
+  data = { collaborators: loaded?.ok ? loaded.collaborators : [] };
   bindEvents();
   render();
-  if (loaded?.warning) toast(loaded.warning, { type: 'error' });
+  if (!loaded?.ok) toast(`Could not load data: ${loaded?.error || 'unknown error'}`, { type: 'error' });
+  else if (loaded.notice) toast(loaded.notice);
 })();

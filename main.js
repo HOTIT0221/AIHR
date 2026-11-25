@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain, shell, clipboard, dialog, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const db = require('./db');
 
 const THEMES = {
   dark: { color: '#0b0d12', symbolColor: '#c9d1e0' },
@@ -8,30 +9,16 @@ const THEMES = {
 };
 
 let win;
-const dataFile = () => path.join(app.getPath('userData'), 'collaborators.json');
+let startupNotice = null;
 
-function readData() {
-  const file = dataFile();
-  if (!fs.existsSync(file)) return { collaborators: [] };
+// Wrap DB calls so the renderer always gets { ok, ... } instead of a thrown IPC error.
+const safe = (fn) => async (_e, ...args) => {
   try {
-    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (!Array.isArray(parsed.collaborators)) parsed.collaborators = [];
-    return parsed;
+    return { ok: true, ...(await fn(...args)) };
   } catch (err) {
-    // Keep the unreadable file instead of silently overwriting it later.
-    const backup = file.replace(/\.json$/, `.corrupt-${Date.now()}.json`);
-    try { fs.copyFileSync(file, backup); } catch {}
-    return { collaborators: [], warning: `Data file could not be read. A copy was kept at ${backup}` };
+    return { ok: false, error: err.message };
   }
-}
-
-function writeData(data) {
-  const file = dataFile();
-  const tmp = file + '.tmp';
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(tmp, JSON.stringify({ version: 1, collaborators: data.collaborators }, null, 2), 'utf8');
-  fs.renameSync(tmp, file);
-}
+};
 
 function createWindow() {
   const work = screen.getPrimaryDisplay().workAreaSize;
@@ -64,16 +51,9 @@ function createWindow() {
   win.webContents.on('will-navigate', (e) => e.preventDefault());
 }
 
-ipcMain.handle('data:load', () => readData());
-
-ipcMain.handle('data:save', (_e, data) => {
-  try {
-    writeData(data);
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: err.message };
-  }
-});
+ipcMain.handle('db:list', safe(() => ({ collaborators: db.list(), notice: startupNotice })));
+ipcMain.handle('db:upsert', safe((c) => ({ collaborator: db.upsert(c) })));
+ipcMain.handle('db:remove', safe((id) => (db.remove(id), {})));
 
 ipcMain.handle('open-external', (_e, url) => {
   if (typeof url === 'string' && /^https?:\/\//i.test(url)) shell.openExternal(url);
@@ -101,29 +81,67 @@ ipcMain.handle('file:save', async (_e, { defaultName, content, filters }) => {
   return { ok: true, filePath };
 });
 
-ipcMain.handle('file:open', async () => {
+ipcMain.handle('db:backup', safe(async (stamp) => {
+  const { canceled, filePath } = await dialog.showSaveDialog(win, {
+    defaultPath: path.join(app.getPath('documents'), `hrmanager-backup-${stamp}.db`),
+    filters: [
+      { name: 'SQLite database', extensions: ['db'] },
+      { name: 'JSON', extensions: ['json'] },
+    ],
+  });
+  if (canceled || !filePath) return { canceled: true };
+  if (path.extname(filePath).toLowerCase() === '.json') {
+    const json = { version: 1, exportedAt: new Date().toISOString(), collaborators: db.list() };
+    fs.writeFileSync(filePath, JSON.stringify(json, null, 2), 'utf8');
+  } else {
+    db.backupTo(filePath);
+  }
+  return { filePath };
+}));
+
+ipcMain.handle('db:restore', safe(async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog(win, {
     properties: ['openFile'],
-    filters: [{ name: 'Backup', extensions: ['json'] }],
+    filters: [{ name: 'Backup (.db, .json)', extensions: ['db', 'json'] }],
   });
-  if (canceled || !filePaths[0]) return { ok: false, canceled: true };
-  try {
-    const parsed = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
-    const list = Array.isArray(parsed) ? parsed : parsed.collaborators;
-    if (!Array.isArray(list)) throw new Error('No collaborators found in this file.');
-    return { ok: true, collaborators: list };
-  } catch (err) {
-    return { ok: false, error: err.message };
+  if (canceled || !filePaths[0]) return { canceled: true };
+  const file = filePaths[0];
+  let items;
+  if (path.extname(file).toLowerCase() === '.json') {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    items = Array.isArray(parsed) ? parsed : parsed.collaborators;
+    if (!Array.isArray(items)) throw new Error('No collaborators found in this file.');
+  } else {
+    items = db.readExternal(file);
   }
-});
+  const counts = db.upsertMany(items, { keepTimestamps: true });
+  return { ...counts, collaborators: db.list() };
+}));
 
-app.whenReady().then(() => {
-  createWindow();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+if (!app.requestSingleInstanceLock()) {
+  // Only one window may own the database at a time.
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (win) { if (win.isMinimized()) win.restore(); win.focus(); }
   });
-});
 
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') app.quit();
-});
+  app.whenReady().then(() => {
+    try {
+      startupNotice = db.open(app.getPath('userData'));
+    } catch (err) {
+      dialog.showErrorBox('AITrain HR Manager', `Could not open the database:\n\n${err.message}`);
+      app.quit();
+      return;
+    }
+    createWindow();
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    });
+  });
+
+  app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+  });
+  app.on('will-quit', () => db.close());
+}
