@@ -1,8 +1,9 @@
 'use strict';
 
-/* Edit this list to change the available states (key must stay stable once used). */
+/* Status options, used for both the DA and the HS assessment.
+   Keys must stay stable once used and match STATE_KEYS in db.js. */
 const STATES = [
-  { key: 'new',        label: 'New',            color: '#94a3b8' },
+  { key: 'new',        label: 'Not started',    color: '#94a3b8' },
   { key: 'preparing',  label: 'Preparing',      color: '#60a5fa' },
   { key: 'inprogress', label: 'In Progress',    color: '#a78bfa' },
   { key: 'waiting',    label: 'Waiting Result', color: '#fbbf24' },
@@ -13,6 +14,10 @@ const STATES = [
 ];
 const STATE_MAP = Object.fromEntries(STATES.map((s) => [s.key, s]));
 const stateOf = (key) => STATE_MAP[key] || STATES[0];
+const ASSESSMENTS = {
+  da: { tag: 'DA', name: 'DataAnnotation' },
+  hs: { tag: 'HS', name: 'Handshake' },
+};
 
 /* ───────────── Icons (lucide-style) ───────────── */
 const ICONS = {
@@ -107,12 +112,12 @@ const isScheduled = (date) => !!date && dayDiff(date) > 0;
 let data = { collaborators: [] };
 const ui = {
   search: '',
-  filter: 'all',
+  filter: { da: 'all', hs: 'all' },
   sortKey: 'updatedAt',
   sortDir: 'desc',
   revealed: new Set(),
   editingId: null,
-  formState: 'new',
+  formStates: { da: 'new', hs: 'new' },
   firstRender: true,
 };
 
@@ -159,7 +164,11 @@ function renderStats() {
   const daSched = list.filter((c) => isScheduled(c.daDate)).length;
   const hsSched = list.filter((c) => isScheduled(c.hsDate)).length;
   const both = list.filter((c) => isTaken(c.daDate) && isTaken(c.hsDate)).length;
-  const approved = list.filter((c) => c.state === 'approved').length;
+  const daApproved = list.filter((c) => c.daState === 'approved').length;
+  const hsApproved = list.filter((c) => c.hsState === 'approved').length;
+  const bothApproved = list.filter((c) => c.daState === 'approved' && c.hsState === 'approved').length;
+  const closed = ['rejected', 'inactive'];
+  const active = list.filter((c) => !(closed.includes(c.daState) && closed.includes(c.hsState))).length;
   const pct = (n) => (total ? Math.round((n / total) * 100) : 0);
 
   const card = (label, ico, color, value, foot, percent) => `
@@ -172,42 +181,49 @@ function renderStats() {
 
   $('#stats').innerHTML =
     card('Total collaborators', 'users', '#7c6cff', total,
-      `<b>${list.filter((c) => !['inactive', 'rejected'].includes(c.state)).length}</b> active`, null) +
+      `<b>${active}</b> active`, null) +
     card('DA assessment taken', 'clipboard', '#a78bfa', daTaken,
-      `<b>${pct(daTaken)}%</b> complete${daSched ? ` · <b>${daSched}</b> scheduled` : ''}`, pct(daTaken)) +
+      `<b>${daApproved}</b> approved${daSched ? ` · <b>${daSched}</b> scheduled` : ''}`, pct(daTaken)) +
     card('HS assessment taken', 'briefcase', '#22d3ee', hsTaken,
-      `<b>${pct(hsTaken)}%</b> complete${hsSched ? ` · <b>${hsSched}</b> scheduled` : ''}`, pct(hsTaken)) +
+      `<b>${hsApproved}</b> approved${hsSched ? ` · <b>${hsSched}</b> scheduled` : ''}`, pct(hsTaken)) +
     card('Both assessments done', 'award', '#34d399', both,
-      `<b>${approved}</b> marked Approved`, pct(both));
+      `<b>${bothApproved}</b> approved on both`, pct(both));
 
   requestAnimationFrame(() => $$('#stats .stat-bar > i').forEach((el) => { el.style.width = `${el.dataset.w}%`; }));
 }
 
 function renderFilters() {
-  const counts = {};
-  for (const c of data.collaborators) counts[c.state] = (counts[c.state] || 0) + 1;
-  const chip = (key, label, color, count) => `
-    <button class="chip ${ui.filter === key ? 'active' : ''}" data-filter="${key}" ${color ? `style="--c:${color}"` : ''}>
-      ${color ? '<span class="dot"></span>' : ''}${label}<span class="count">${count}</span>
-    </button>`;
-  $('#filters').innerHTML =
-    chip('all', 'All', null, data.collaborators.length) +
-    STATES.filter((s) => counts[s.key] || ui.filter === s.key)
-      .map((s) => chip(s.key, s.label, s.color, counts[s.key] || 0)).join('');
+  const row = (which) => {
+    const key = `${which}State`;
+    const counts = {};
+    for (const c of data.collaborators) counts[c[key]] = (counts[c[key]] || 0) + 1;
+    const current = ui.filter[which];
+    const chip = (state, label, color, count) => `
+      <button class="chip ${current === state ? 'active' : ''}" data-which="${which}" data-filter="${state}" ${color ? `style="--c:${color}"` : ''}>
+        ${color ? '<span class="dot"></span>' : ''}${label}<span class="count">${count}</span>
+      </button>`;
+    return `<div class="chip-row">
+      <span class="chip-label" title="${ASSESSMENTS[which].name}"><span class="tag tag-${which}">${ASSESSMENTS[which].tag}</span></span>
+      ${chip('all', 'All', null, data.collaborators.length)}
+      ${STATES.filter((s) => counts[s.key] || current === s.key).map((s) => chip(s.key, s.label, s.color, counts[s.key] || 0)).join('')}
+    </div>`;
+  };
+  $('#filters').innerHTML = row('da') + row('hs');
 }
 
 function visibleRows() {
   const q = ui.search.trim().toLowerCase();
-  let list = data.collaborators.filter((c) => ui.filter === 'all' || c.state === ui.filter);
+  let list = data.collaborators.filter((c) =>
+    (ui.filter.da === 'all' || c.daState === ui.filter.da) &&
+    (ui.filter.hs === 'all' || c.hsState === ui.filter.hs));
   if (q) {
     list = list.filter((c) =>
-      [c.name, c.contact, c.linkedin, c.anydeskId, c.notes, stateOf(c.state).label]
+      [c.name, c.contact, c.linkedin, c.anydeskId, c.notes, stateOf(c.daState).label, stateOf(c.hsState).label]
         .some((v) => String(v || '').toLowerCase().includes(q) ||
           (v === c.anydeskId && String(v || '').replace(/\s/g, '').includes(q.replace(/\s/g, '')))));
   }
   const dir = ui.sortDir === 'asc' ? 1 : -1;
   const key = ui.sortKey;
-  const stateIdx = (k) => STATES.findIndex((s) => s.key === k);
   return list.sort((a, b) => {
     if (key === 'daDate' || key === 'hsDate') {
       // Empty dates always sink to the bottom.
@@ -217,19 +233,28 @@ function visibleRows() {
       return a[key].localeCompare(b[key]) * dir;
     }
     if (key === 'name') return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }) * dir;
-    if (key === 'state') return (stateIdx(a.state) - stateIdx(b.state)) * dir || a.name.localeCompare(b.name);
     return ((a.updatedAt || 0) - (b.updatedAt || 0)) * dir;
   });
 }
 
-function dateCell(s) {
-  if (!s) return '<span class="not-taken">Not taken</span>';
-  const r = relDate(s);
-  return `<div class="date ${r.cls}"><span class="date-main">${fmtDate(s)}</span><span class="date-rel">${r.text}</span></div>`;
+/** Assessment cell: clickable status pill on top, date underneath. */
+function assessCell(c, which) {
+  const st = stateOf(c[`${which}State`]);
+  const date = c[`${which}Date`];
+  let when = '<span class="a-date none">No date</span>';
+  if (date) {
+    const r = relDate(date);
+    when = `<span class="a-date ${r.cls}">${fmtDate(date)} · ${r.text}</span>`;
+  }
+  return `<div class="assess">
+    <button class="pill" data-act="state" data-which="${which}" title="Change ${ASSESSMENTS[which].name} status" style="--c:${st.color}">
+      <span class="dot"></span>${esc(st.label)}${icon('chevron')}
+    </button>
+    ${when}
+  </div>`;
 }
 
 function rowHtml(c) {
-  const st = stateOf(c.state);
   const li = c.linkedin
     ? `<button class="li-link" data-act="linkedin" title="Click to copy: ${esc(c.linkedin)}">${icon('linkedin')}<span>${esc(linkedinHandle(c.linkedin))}</span></button>`
     : '<span class="empty">—</span>';
@@ -261,11 +286,10 @@ function rowHtml(c) {
     </div></td>
     <td>${li}</td>
     <td>${contact}</td>
-    <td>${dateCell(c.daDate)}</td>
-    <td>${dateCell(c.hsDate)}</td>
+    <td>${assessCell(c, 'da')}</td>
+    <td>${assessCell(c, 'hs')}</td>
     <td>${adId}</td>
     <td>${pw}</td>
-    <td><button class="pill" data-act="state" style="--c:${st.color}"><span class="dot"></span>${esc(st.label)}${icon('chevron')}</button></td>
     <td class="notes-cell">${notes}</td>
     <td><div class="row-actions">
       <button class="icon-btn sm" data-act="edit" title="Edit">${icon('edit')}</button>
@@ -315,18 +339,20 @@ function renderTable(flashId) {
 }
 
 /* ───────────── Drawer (add / edit) ───────────── */
-function renderStatePicker() {
-  $('#f-state').innerHTML = STATES.map((s) => `
-    <button type="button" class="state-opt ${ui.formState === s.key ? 'selected' : ''}" data-state="${s.key}" style="--c:${s.color}">
-      <span class="dot"></span>${s.label}
-    </button>`).join('');
+function renderStatePickers() {
+  for (const which of Object.keys(ASSESSMENTS)) {
+    $(`#f-${which}-state`).innerHTML = STATES.map((s) => `
+      <button type="button" class="state-opt ${ui.formStates[which] === s.key ? 'selected' : ''}" data-state="${s.key}" style="--c:${s.color}">
+        <span class="dot"></span>${s.label}
+      </button>`).join('');
+  }
 }
 
 function openDrawer(id = null) {
   closePopover();
   const c = id ? findById(id) : null;
   ui.editingId = c ? c.id : null;
-  ui.formState = c ? c.state : 'new';
+  ui.formStates = { da: c ? c.daState : 'new', hs: c ? c.hsState : 'new' };
   const f = $('#form');
   f.reset();
   f.name.value = c?.name || '';
@@ -345,7 +371,7 @@ function openDrawer(id = null) {
     : 'Fill in what you know — everything except the name is optional.';
   $('#btn-save-label').textContent = c ? 'Save changes' : 'Add collaborator';
   $('#btn-delete-in-drawer').hidden = !c;
-  renderStatePicker();
+  renderStatePickers();
   $('#drawer').classList.add('open');
   $('#drawer').setAttribute('aria-hidden', 'false');
   $('#backdrop').classList.add('open');
@@ -377,7 +403,8 @@ async function submitForm(e) {
     hsDate: f.hsDate.value,
     anydeskId: f.anydeskId.value.trim(),
     anydeskPassword: f.anydeskPassword.value,
-    state: ui.formState,
+    daState: ui.formStates.da,
+    hsState: ui.formStates.hs,
     notes: f.notes.value.trim(),
     updatedAt: Date.now(),
   };
@@ -415,15 +442,16 @@ async function deleteCollaborator(id) {
 }
 
 /* ───────────── Inline state popover ───────────── */
-let popoverFor = null;
-function openStatePopover(btn, id) {
+let popoverFor = null; // { id, which }
+function openStatePopover(btn, id, which) {
   const pop = $('#popover');
-  if (popoverFor === id && !pop.hidden) return closePopover();
+  if (popoverFor?.id === id && popoverFor?.which === which && !pop.hidden) return closePopover();
   const c = findById(id);
-  popoverFor = id;
-  pop.innerHTML = STATES.map((s) => `
+  popoverFor = { id, which };
+  pop.innerHTML = `<div class="pop-title"><span class="tag tag-${which}">${ASSESSMENTS[which].tag}</span>${ASSESSMENTS[which].name} status</div>` +
+    STATES.map((s) => `
     <button class="pop-item" data-state="${s.key}" style="--c:${s.color}">
-      <span class="dot"></span>${s.label}${c.state === s.key ? icon('check') : ''}
+      <span class="dot"></span>${s.label}${c[`${which}State`] === s.key ? icon('check') : ''}
     </button>`).join('');
   pop.hidden = false;
   const r = btn.getBoundingClientRect();
@@ -471,9 +499,9 @@ function applyTheme(theme) {
 function toCsv() {
   const cols = [
     ['Name', 'name'], ['LinkedIn', 'linkedin'], ['Contact', 'contact'],
-    ['DA Assessment Date', 'daDate'], ['HS Assessment Date', 'hsDate'],
-    ['AnyDesk ID', 'anydeskId'], ['AnyDesk Password', 'anydeskPassword'],
-    ['State', (c) => stateOf(c.state).label], ['Notes', 'notes'],
+    ['DA Status', (c) => stateOf(c.daState).label], ['DA Assessment Date', 'daDate'],
+    ['HS Status', (c) => stateOf(c.hsState).label], ['HS Assessment Date', 'hsDate'],
+    ['AnyDesk ID', 'anydeskId'], ['AnyDesk Password', 'anydeskPassword'], ['Notes', 'notes'],
   ];
   const cell = (v) => {
     const s = String(v ?? '');
@@ -520,12 +548,12 @@ function bindEvents() {
   $('#f-name').addEventListener('input', (e) => e.target.classList.remove('invalid'));
   $('#btn-delete-in-drawer').addEventListener('click', () => ui.editingId && deleteCollaborator(ui.editingId));
 
-  $('#f-state').addEventListener('click', (e) => {
+  $$('.state-picker').forEach((picker) => picker.addEventListener('click', (e) => {
     const b = e.target.closest('[data-state]');
     if (!b) return;
-    ui.formState = b.dataset.state;
-    renderStatePicker();
-  });
+    ui.formStates[picker.dataset.which] = b.dataset.state;
+    renderStatePickers();
+  }));
   $('#form').addEventListener('click', (e) => {
     const t = e.target.closest('[data-today],[data-clear]');
     if (!t) return;
@@ -547,7 +575,8 @@ function bindEvents() {
   $('#filters').addEventListener('click', (e) => {
     const b = e.target.closest('[data-filter]');
     if (!b) return;
-    ui.filter = ui.filter === b.dataset.filter ? 'all' : b.dataset.filter;
+    const which = b.dataset.which;
+    ui.filter[which] = ui.filter[which] === b.dataset.filter ? 'all' : b.dataset.filter;
     renderFilters(); renderTable();
   });
 
@@ -556,7 +585,7 @@ function bindEvents() {
     if (!th) return;
     const key = th.dataset.sort;
     if (ui.sortKey === key) ui.sortDir = ui.sortDir === 'asc' ? 'desc' : 'asc';
-    else { ui.sortKey = key; ui.sortDir = key === 'name' || key === 'state' ? 'asc' : 'desc'; }
+    else { ui.sortKey = key; ui.sortDir = key === 'name' ? 'asc' : 'desc'; }
     renderTable();
   });
   $$('.grid th[data-sort]').forEach((th) => th.insertAdjacentHTML('beforeend', `<span class="sort-ind">${icon('arrowDown')}</span>`));
@@ -585,7 +614,7 @@ function bindEvents() {
         break;
       case 'state':
         e.stopPropagation();
-        openStatePopover(btn, id);
+        openStatePopover(btn, id, btn.dataset.which);
         break;
       case 'edit':
         openDrawer(id);
@@ -606,7 +635,7 @@ function bindEvents() {
     if (!b) return;
     if (b.dataset.act === 'add-first') openDrawer();
     if (b.dataset.act === 'clear-filters') {
-      ui.search = ''; ui.filter = 'all'; $('#search').value = '';
+      ui.search = ''; ui.filter = { da: 'all', hs: 'all' }; $('#search').value = '';
       renderFilters(); renderTable();
     }
   });
@@ -614,13 +643,15 @@ function bindEvents() {
   $('#popover').addEventListener('click', async (e) => {
     const b = e.target.closest('[data-state]');
     if (!b || !popoverFor) return;
-    const c = findById(popoverFor);
+    const { id, which } = popoverFor;
+    const c = findById(id);
+    const key = `${which}State`;
     closePopover();
-    if (!c || c.state === b.dataset.state) return;
-    c.state = b.dataset.state;
+    if (!c || c[key] === b.dataset.state) return;
+    c[key] = b.dataset.state;
     c.updatedAt = Date.now();
     renderStats(); renderFilters(); renderTable(c.id);
-    if (await saveOne(c)) toast(`${c.name} → ${stateOf(c.state).label}`);
+    if (await saveOne(c)) toast(`${c.name} · ${ASSESSMENTS[which].tag} → ${stateOf(c[key]).label}`);
   });
   document.addEventListener('click', (e) => {
     if (!e.target.closest('#popover') && !e.target.closest('[data-act="state"]')) closePopover();

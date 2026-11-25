@@ -52,11 +52,10 @@
               <th data-sort="name" class="col-name">Name</th>
               <th class="col-li">LinkedIn</th>
               <th class="col-contact">Contact</th>
-              <th data-sort="daDate" class="col-date"><span class="tag tag-da">DA</span> Assessment</th>
-              <th data-sort="hsDate" class="col-date"><span class="tag tag-hs">HS</span> Assessment</th>
+              <th data-sort="daDate" class="col-assess" title="Sort by DA date"><span class="tag tag-da">DA</span> DataAnnotation</th>
+              <th data-sort="hsDate" class="col-assess" title="Sort by HS date"><span class="tag tag-hs">HS</span> Handshake</th>
               <th class="col-ad">AnyDesk ID</th>
               <th class="col-pw">AnyDesk Password</th>
-              <th data-sort="state" class="col-state">State</th>
               <th class="col-notes">Notes</th>
               <th class="col-actions"></th>
             </tr>
@@ -95,9 +94,10 @@
           <input id="f-contact" name="contact" type="text" placeholder="Email, phone, WhatsApp, Telegram…" />
         </div>
 
-        <div class="field-row">
+        <section class="assess-block">
+          <div class="assess-head"><span class="tag tag-da">DA</span> DataAnnotation assessment</div>
           <div class="field">
-            <label for="f-da"><span class="tag tag-da">DA</span> Assessment date</label>
+            <label for="f-da">Date</label>
             <div class="date-input">
               <input id="f-da" name="daDate" type="date" />
               <button type="button" class="mini" data-today="f-da">Today</button>
@@ -105,14 +105,26 @@
             </div>
           </div>
           <div class="field">
-            <label for="f-hs"><span class="tag tag-hs">HS</span> Assessment date</label>
+            <label>Status</label>
+            <div class="state-picker" id="f-da-state" data-which="da"></div>
+          </div>
+        </section>
+
+        <section class="assess-block">
+          <div class="assess-head"><span class="tag tag-hs">HS</span> Handshake assessment</div>
+          <div class="field">
+            <label for="f-hs">Date</label>
             <div class="date-input">
               <input id="f-hs" name="hsDate" type="date" />
               <button type="button" class="mini" data-today="f-hs">Today</button>
               <button type="button" class="mini ghost" data-clear="f-hs">Clear</button>
             </div>
           </div>
-        </div>
+          <div class="field">
+            <label>Status</label>
+            <div class="state-picker" id="f-hs-state" data-which="hs"></div>
+          </div>
+        </section>
 
         <div class="field-row">
           <div class="field">
@@ -126,11 +138,6 @@
               <button type="button" class="icon-btn sm" id="f-adpw-toggle" title="Show / hide"><span class="ico" data-icon="eye"></span></button>
             </div>
           </div>
-        </div>
-
-        <div class="field">
-          <label>State</label>
-          <div class="state-picker" id="f-state"></div>
         </div>
 
         <div class="field">

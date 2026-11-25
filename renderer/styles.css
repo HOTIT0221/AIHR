@@ -176,8 +176,11 @@ kbd {
 .stat-foot b { color: var(--text-2); font-weight: 600; }
 
 /* ───────────── Toolbar / chips ───────────── */
-.toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
-.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.toolbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.chips { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.chip-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.chip-label { width: 34px; display: inline-flex; }
+.chip-label .tag { height: 22px; padding: 0 7px; font-size: 11px; }
 .chip {
   height: 32px; padding: 0 12px;
   display: inline-flex; align-items: center; gap: 8px;
@@ -208,7 +211,7 @@ kbd {
   overflow: hidden;
 }
 .table-scroll { flex: 1; overflow: auto; position: relative; }
-.grid { width: 100%; min-width: 1360px; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
+.grid { width: 100%; min-width: 1340px; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
 .grid th {
   position: sticky; top: 0; z-index: 2;
   text-align: left; white-space: nowrap;
@@ -246,10 +249,9 @@ kbd {
 .col-name { width: 190px; }
 .col-li { width: 150px; }
 .col-contact { width: 170px; }
-.col-date { width: 132px; }
+.col-assess { width: 210px; }
 .col-ad { width: 150px; }
 .col-pw { width: 150px; }
-.col-state { width: 152px; }
 .col-actions { width: 76px; }
 .grid td { overflow: hidden; }
 
@@ -286,17 +288,12 @@ tr:hover .cell-copy .icon-btn, .cell-copy .icon-btn.keep { opacity: 1; transform
 .li-link:hover .ico { color: #fff; }
 .li-link span:last-child { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 
-.date { display: flex; flex-direction: column; gap: 2px; }
-.date-main { display: flex; align-items: center; gap: 7px; font-weight: 550; white-space: nowrap; font-variant-numeric: tabular-nums; }
-.date-main::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: #34d399; box-shadow: 0 0 0 3px rgba(52, 211, 153, .15); }
-.date.future .date-main::before { background: #60a5fa; box-shadow: 0 0 0 3px rgba(96, 165, 250, .15); }
-.date-rel { font-size: 11.5px; color: var(--muted); padding-left: 14px; }
-.date.future .date-rel { color: #60a5fa; }
-.date.today .date-rel { color: #34d399; font-weight: 600; }
-.not-taken {
-  display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 12.5px;
-}
-.not-taken::before { content: ""; width: 7px; height: 7px; border-radius: 50%; border: 1.5px dashed var(--muted); opacity: .7; }
+.assess { display: flex; flex-direction: column; align-items: flex-start; gap: 5px; min-width: 0; }
+.assess .pill { height: 26px; }
+.a-date { font-size: 11.5px; color: var(--muted); white-space: nowrap; font-variant-numeric: tabular-nums; padding-left: 2px; }
+.a-date.future { color: #60a5fa; }
+.a-date.today { color: #34d399; font-weight: 600; }
+.a-date.none { opacity: .6; }
 
 .tag {
   display: inline-grid; place-items: center; height: 17px; padding: 0 5px; border-radius: 5px;
@@ -386,6 +383,12 @@ tr:hover .row-actions { opacity: 1; }
 input[type="date"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: .7; }
 input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
 
+.assess-block {
+  display: flex; flex-direction: column; gap: 12px;
+  padding: 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2);
+}
+.assess-block .field input { background: var(--surface); }
+.assess-head { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13px; }
 .date-input { display: flex; gap: 6px; }
 .date-input input { flex: 1; min-width: 0; }
 .mini {
@@ -422,6 +425,10 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; }
   animation: pop .16s var(--ease);
 }
 @keyframes pop { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+.pop-title {
+  display: flex; align-items: center; gap: 7px; padding: 6px 10px 8px;
+  font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .4px;
+}
 .pop-item {
   width: 100%; display: flex; align-items: center; gap: 9px;
   padding: 8px 10px; border-radius: 8px; border: 0; background: transparent; text-align: left;
