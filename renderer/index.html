@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>AITrain HR Manager</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="titlebar">
+    <div class="brand">
+      <div class="logo">AT</div>
+      <span class="brand-name">AITrain HR</span>
+      <span class="brand-tag">Collaborator Tracker</span>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="page-head">
+      <div>
+        <h1>Collaborators</h1>
+        <p class="subtitle">DataAnnotation &amp; Handshake assessment progress at a glance</p>
+      </div>
+      <div class="head-actions">
+        <label class="search">
+          <span class="ico" data-icon="search"></span>
+          <input id="search" type="text" placeholder="Search name, contact, AnyDesk, notes…" autocomplete="off" />
+          <kbd>Ctrl F</kbd>
+        </label>
+        <button class="btn btn-primary" id="btn-add"><span class="ico" data-icon="plus"></span>Add collaborator</button>
+      </div>
+    </section>
+
+    <section class="stats" id="stats"></section>
+
+    <section class="toolbar">
+      <div class="chips" id="filters"></div>
+      <div class="tool-actions">
+        <button class="icon-btn" id="btn-theme" title="Toggle theme"><span class="ico" data-icon="moon"></span></button>
+        <button class="icon-btn" id="btn-export-csv" title="Export CSV"><span class="ico" data-icon="sheet"></span></button>
+        <button class="icon-btn" id="btn-backup" title="Back up to JSON"><span class="ico" data-icon="download"></span></button>
+        <button class="icon-btn" id="btn-restore" title="Import JSON backup"><span class="ico" data-icon="upload"></span></button>
+      </div>
+    </section>
+
+    <section class="table-card">
+      <div class="table-scroll">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th data-sort="name" class="col-name">Name</th>
+              <th class="col-li">LinkedIn</th>
+              <th class="col-contact">Contact</th>
+              <th data-sort="daDate" class="col-date"><span class="tag tag-da">DA</span> Assessment</th>
+              <th data-sort="hsDate" class="col-date"><span class="tag tag-hs">HS</span> Assessment</th>
+              <th class="col-ad">AnyDesk ID</th>
+              <th class="col-pw">AnyDesk Password</th>
+              <th data-sort="state" class="col-state">State</th>
+              <th class="col-notes">Notes</th>
+              <th class="col-actions"></th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+        <div class="empty-state" id="empty" hidden></div>
+      </div>
+      <footer class="table-foot" id="foot"></footer>
+    </section>
+  </main>
+
+  <!-- Add / edit drawer -->
+  <div class="backdrop" id="backdrop"></div>
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <form id="form" autocomplete="off">
+      <div class="drawer-head">
+        <div>
+          <h2 id="drawer-title">Add collaborator</h2>
+          <p class="subtitle" id="drawer-sub">Fill in what you know — everything except the name is optional.</p>
+        </div>
+        <button type="button" class="icon-btn" data-close title="Close (Esc)"><span class="ico" data-icon="x"></span></button>
+      </div>
+
+      <div class="drawer-body">
+        <div class="field">
+          <label for="f-name">Name <span class="req">*</span></label>
+          <input id="f-name" name="name" type="text" placeholder="Full name" required />
+        </div>
+        <div class="field">
+          <label for="f-linkedin">LinkedIn profile</label>
+          <input id="f-linkedin" name="linkedin" type="text" placeholder="https://www.linkedin.com/in/username" />
+        </div>
+        <div class="field">
+          <label for="f-contact">Contact info</label>
+          <input id="f-contact" name="contact" type="text" placeholder="Email, phone, WhatsApp, Telegram…" />
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-da"><span class="tag tag-da">DA</span> Assessment date</label>
+            <div class="date-input">
+              <input id="f-da" name="daDate" type="date" />
+              <button type="button" class="mini" data-today="f-da">Today</button>
+              <button type="button" class="mini ghost" data-clear="f-da">Clear</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="f-hs"><span class="tag tag-hs">HS</span> Assessment date</label>
+            <div class="date-input">
+              <input id="f-hs" name="hsDate" type="date" />
+              <button type="button" class="mini" data-today="f-hs">Today</button>
+              <button type="button" class="mini ghost" data-clear="f-hs">Clear</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label for="f-adid">AnyDesk ID</label>
+            <input id="f-adid" name="anydeskId" type="text" placeholder="123 456 789" class="mono" />
+          </div>
+          <div class="field">
+            <label for="f-adpw">AnyDesk password</label>
+            <div class="pw-input">
+              <input id="f-adpw" name="anydeskPassword" type="password" class="mono" />
+              <button type="button" class="icon-btn sm" id="f-adpw-toggle" title="Show / hide"><span class="ico" data-icon="eye"></span></button>
+            </div>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>State</label>
+          <div class="state-picker" id="f-state"></div>
+        </div>
+
+        <div class="field">
+          <label for="f-notes">Notes</label>
+          <textarea id="f-notes" name="notes" rows="4" placeholder="Anything worth remembering…"></textarea>
+        </div>
+      </div>
+
+      <div class="drawer-foot">
+        <button type="button" class="btn btn-danger-ghost" id="btn-delete-in-drawer" hidden><span class="ico" data-icon="trash"></span>Delete</button>
+        <div class="spacer"></div>
+        <button type="button" class="btn btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn btn-primary"><span class="ico" data-icon="check"></span><span id="btn-save-label">Save</span></button>
+      </div>
+    </form>
+  </aside>
+
+  <div class="popover" id="popover" hidden></div>
+  <div class="toasts" id="toasts"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

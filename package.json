@@ -1,0 +1,26 @@
+{
+  "name": "aitrain-hr-manager",
+  "productName": "AITrain HR Manager",
+  "version": "1.0.0",
+  "description": "Track collaborators for DataAnnotation and Handshake assessments at a glance.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable --x64"
+  },
+  "author": "AITrain",
+  "build": {
+    "appId": "com.aitrain.hrmanager",
+    "productName": "AITrain HR Manager",
+    "directories": { "output": "dist", "buildResources": "build" },
+    "files": ["main.js", "preload.js", "renderer/**/*", "package.json"],
+    "win": { "icon": "build/icon.png", "target": "portable" },
+    "portable": { "artifactName": "AITrain-HR-Manager-${version}.exe" }
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "devDependencies": {
+    "electron": "^45.5.0",
+    "electron-builder": "^26.18.0"
+  }
+}
