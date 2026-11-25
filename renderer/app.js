@@ -231,7 +231,7 @@ function dateCell(s) {
 function rowHtml(c) {
   const st = stateOf(c.state);
   const li = c.linkedin
-    ? `<button class="li-link" data-act="linkedin" title="${esc(c.linkedin)}">${icon('linkedin')}<span>${esc(linkedinHandle(c.linkedin))}</span></button>`
+    ? `<button class="li-link" data-act="linkedin" title="Click to copy: ${esc(c.linkedin)}">${icon('linkedin')}<span>${esc(linkedinHandle(c.linkedin))}</span></button>`
     : '<span class="empty">—</span>';
   const contact = c.contact
     ? `<div class="cell-copy"><span class="val" title="${esc(c.contact)}">${esc(c.contact)}</span>
@@ -580,7 +580,8 @@ function bindEvents() {
         renderTable();
         break;
       case 'linkedin':
-        window.api.openExternal(normalizeUrl(c.linkedin));
+        await window.api.copy(normalizeUrl(c.linkedin));
+        toast('Copied LinkedIn URL');
         break;
       case 'state':
         e.stopPropagation();
